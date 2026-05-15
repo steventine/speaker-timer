@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moderator — Speaker Timer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="app.config.js"></script>
+  <script src="app.js"></script>
+
+  <div class="mod-layout">
+
+    <!-- ── Top bar ── -->
+    <header class="mod-topbar">
+      <h1>🎛️ Speaker Timer</h1>
+      <div class="session-pill">
+        <span style="font-size:12px;color:var(--muted);">SESSION</span>
+        <span class="session-code-text" id="session-code">----</span>
+        <button class="btn btn-ghost btn-sm" id="copy-code-btn" title="Copy speaker link">📋</button>
+        <button class="btn btn-ghost btn-sm" onclick="newSession()" title="Start a new session with a fresh code">+ New Session</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="conn-dot" id="conn-dot"></div>
+        <span class="conn-label" id="conn-label">Connecting…</span>
+        <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
+      </div>
+    </header>
+
+    <!-- ── Main panel ── -->
+    <main class="mod-main">
+
+      <!-- Timer set + controls -->
+      <div class="panel">
+        <div class="panel-label">Timer</div>
+
+        <div class="time-set-row">
+          <input class="time-num-input" id="set-min" type="number" min="0" max="99" value="20" title="Minutes">
+          <span class="time-num-sep">:</span>
+          <input class="time-num-input" id="set-sec" type="number" min="0" max="59" value="00" title="Seconds">
+          <button class="btn btn-primary" id="set-btn" style="margin-left:8px;">Set Time</button>
+        </div>
+
+        <div class="control-row">
+          <button class="btn btn-success btn-lg" id="start-btn">▶ Start</button>
+          <button class="btn btn-warning btn-lg" id="pause-btn">⏸ Pause</button>
+          <button class="btn btn-secondary btn-lg" id="resume-btn">▶ Resume</button>
+          <button class="btn btn-danger" id="reset-btn">↺ Reset</button>
+        </div>
+
+        <div class="adjust-row">
+          <span class="adjust-label">Adjust:</span>
+          <button class="btn btn-ghost btn-sm" id="minus5">−5 min</button>
+          <button class="btn btn-ghost btn-sm" id="minus1">−1 min</button>
+          <button class="btn btn-ghost btn-sm" id="minus30">−30 sec</button>
+          <button class="btn btn-ghost btn-sm" id="plus30">+30 sec</button>
+          <button class="btn btn-ghost btn-sm" id="plus1">+1 min</button>
+          <button class="btn btn-ghost btn-sm" id="plus5">+5 min</button>
+        </div>
+      </div>
+
+      <!-- Speaker queue -->
+      <div class="panel">
+        <div class="panel-label">Speaker Queue</div>
+        <div class="speaker-list" id="speaker-list">
+          <div style="color:var(--muted);font-size:14px;">No speakers added yet.</div>
+        </div>
+        <div class="add-speaker-row">
+          <input class="text-input" id="spk-name-input" placeholder="Speaker name" style="flex:2;">
+          <input class="time-num-input" id="spk-min-input" type="number" min="1" max="99" value="10" title="Minutes" style="width:62px;">
+          <span class="time-num-sep" style="font-size:18px;">m</span>
+          <button class="btn btn-primary btn-sm" id="add-spk-btn">+ Add</button>
+        </div>
+      </div>
+
+      <!-- Message to speaker -->
+      <div class="panel">
+        <div class="panel-label">Send Message to Speaker</div>
+        <div class="message-row">
+          <input class="text-input" id="msg-input" placeholder="e.g. Don't forget to ask for donations" maxlength="120">
+          <button class="btn btn-primary" id="send-msg-btn">Send</button>
+          <button class="btn btn-ghost btn-sm" id="clear-msg-btn" title="Clear message from speaker view">✕</button>
+        </div>
+        <div class="message-history" id="msg-history"></div>
+      </div>
+
+    </main>
+
+    <!-- ── Sidebar: speaker preview ── -->
+    <aside class="mod-sidebar">
+      <div class="panel-label">Speaker View Preview</div>
+      <div class="preview-phone" id="preview-phone">
+        <div class="preview-spk-name" id="preview-name"></div>
+        <div class="preview-timer green" id="preview-timer">--:--</div>
+        <div class="preview-status" id="preview-status">IDLE</div>
+        <div class="preview-msg" id="preview-msg"></div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div class="panel-label">Share with Speaker</div>
+        <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+          Have the speaker open <strong>speaker.html</strong> and enter code:<br>
+          <span style="font-family:'Courier New';font-size:22px;color:var(--accent);letter-spacing:0.2em;" id="share-code">----</span>
+        </p>
+        <button class="btn btn-secondary btn-sm" id="copy-link-btn" style="margin-top:8px;">Copy speaker link</button>
+      </div>
+
+      <div style="margin-top:4px;">
+        <div class="panel-label">Session State</div>
+        <div id="state-badge" style="font-size:15px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">IDLE</div>
+      </div>
+    </aside>
+
+  </div>
+
+  <script>
+    // ── State ─────────────────────────────────────────────────
+    const STORAGE_KEY = 'speaker-clock-mod-code';
+    let CODE     = localStorage.getItem(STORAGE_KEY) || generateCode();
+    let session  = null;
+    let tickInt  = null;
+    let unwatch  = null;
+
+    // ── DOM ───────────────────────────────────────────────────
+    const sessionCodeEl  = document.getElementById('session-code');
+    const shareCodeEl    = document.getElementById('share-code');
+    const connDot        = document.getElementById('conn-dot');
+    const connLabel      = document.getElementById('conn-label');
+    const setMin         = document.getElementById('set-min');
+    const setSec         = document.getElementById('set-sec');
+    const startBtn       = document.getElementById('start-btn');
+    const pauseBtn       = document.getElementById('pause-btn');
+    const resumeBtn      = document.getElementById('resume-btn');
+    const resetBtn       = document.getElementById('reset-btn');
+    const speakerList    = document.getElementById('speaker-list');
+    const msgInput       = document.getElementById('msg-input');
+    const msgHistory     = document.getElementById('msg-history');
+    const previewTimer   = document.getElementById('preview-timer');
+    const previewName    = document.getElementById('preview-name');
+    const previewStatus  = document.getElementById('preview-status');
+    const previewMsg     = document.getElementById('preview-msg');
+    const stateBadge     = document.getElementById('state-badge');
+
+    // ── Init ──────────────────────────────────────────────────
+    sessionCodeEl.textContent = CODE;
+    shareCodeEl.textContent   = CODE;
+
+    if (!FIREBASE_READY) {
+      connDot.classList.add('fail');
+      connLabel.textContent = 'Firebase not configured';
+      connLabel.style.color = 'var(--red)';
+      showSetupWarning();
+    } else {
+      initSession();
+    }
+
+    function showSetupWarning() {
+      const warn = document.createElement('div');
+      warn.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#1a0a0a;border:1px solid var(--red);border-radius:12px;padding:16px 24px;font-size:14px;max-width:500px;text-align:center;z-index:999;line-height:1.6;';
+      warn.innerHTML = '⚠️ <strong>Firebase not configured.</strong><br>Open <code>app.js</code> and fill in your <code>FIREBASE_CONFIG</code> values.<br><a href="https://console.firebase.google.com/" target="_blank" style="color:var(--accent);">Get config from Firebase Console →</a>';
+      document.body.appendChild(warn);
+    }
+
+    async function initSession() {
+      try {
+        const snap = await getDb().ref(`sessions/${CODE}`).once('value');
+        if (snap.exists()) {
+          connLabel.textContent = 'Reconnected';
+        } else {
+          await createSession(CODE, getDurationMs(), []);
+          connLabel.textContent = 'Connected';
+        }
+        localStorage.setItem(STORAGE_KEY, CODE);
+        connDot.classList.add('ok');
+        startWatching();
+      } catch (e) {
+        connDot.classList.add('fail');
+        connLabel.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function newSession() {
+      if (!confirm('Start a new session? The current session code will stop working for any connected speakers.')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      location.reload();
+    }
+
+    function startWatching() {
+      unwatch = watchSession(CODE, (data) => {
+        if (!data) return;
+        session = data;
+        renderFromSession();
+      });
+    }
+
+    // ── Render ────────────────────────────────────────────────
+    function renderFromSession() {
+      if (!session) return;
+
+      const state  = session.state || 'idle';
+      const rem    = calcRemaining(session);
+
+      // State badge
+      stateBadge.textContent = state.toUpperCase();
+      stateBadge.style.color = state === 'running' ? 'var(--green)' :
+                               state === 'paused'  ? 'var(--yellow)' :
+                               state === 'finished'? 'var(--red)' : 'var(--muted)';
+
+      // Preview
+      previewTimer.textContent = formatTime(rem);
+      const cc = colorClass(rem);
+      previewTimer.className = `preview-timer ${cc}`;
+
+      const speakers = session.speakers || [];
+      const idx      = session.currentSpeakerIndex || 0;
+      const spkName  = speakers[idx] ? speakers[idx].name : '';
+      previewName.textContent = spkName;
+
+      previewStatus.textContent = state === 'idle'     ? 'READY' :
+                                  state === 'paused'   ? 'PAUSED' :
+                                  state === 'finished' ? "TIME'S UP" : '';
+
+      // Show message in preview
+      if (session.message && session.message.text) {
+        previewMsg.textContent = '💬 ' + session.message.text;
+        previewMsg.style.display = 'block';
+      } else {
+        previewMsg.style.display = 'none';
+      }
+
+      // Button states
+      startBtn.disabled  = state === 'running' || state === 'paused' || state === 'finished';
+      resumeBtn.className = `btn btn-lg ${state === 'paused' ? 'btn-success' : 'btn-secondary'}`;
+      pauseBtn.disabled  = state !== 'running';
+      resumeBtn.disabled = state !== 'paused';
+      setMin.disabled    = state === 'running';
+      setSec.disabled    = state === 'running';
+
+      // Tick for running state
+      if (state === 'running' && !tickInt) {
+        tickInt = setInterval(tickPreview, 250);
+      } else if (state !== 'running' && tickInt) {
+        clearInterval(tickInt);
+        tickInt = null;
+      }
+
+      renderSpeakerList();
+    }
+
+    function tickPreview() {
+      if (!session || session.state !== 'running') return;
+      const rem = calcRemaining(session);
+      previewTimer.textContent = formatTime(rem);
+      const cc = colorClass(rem);
+      previewTimer.className = `preview-timer ${cc}`;
+    }
+
+    // ── Speaker list ──────────────────────────────────────────
+    function renderSpeakerList() {
+      const speakers = (session && session.speakers) || [];
+      const active   = (session && session.currentSpeakerIndex) || 0;
+      if (speakers.length === 0) {
+        speakerList.innerHTML = '<div style="color:var(--muted);font-size:14px;">No speakers added yet.</div>';
+        return;
+      }
+      speakerList.innerHTML = speakers.map((s, i) => `
+        <div class="speaker-item ${i === active ? 'active' : ''}" data-index="${i}">
+          <div class="spk-badge">${i + 1}</div>
+          <div class="spk-info">
+            <div class="spk-name">${escHtml(s.name)}</div>
+            <div class="spk-dur">${formatTime(s.duration)}</div>
+          </div>
+          <button class="btn-icon" data-action="load" data-index="${i}" title="Load this speaker">▶</button>
+          <button class="btn-icon" data-action="remove" data-index="${i}" title="Remove">✕</button>
+        </div>
+      `).join('');
+    }
+
+    speakerList.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const idx    = parseInt(btn.dataset.index, 10);
+      const action = btn.dataset.action;
+      if (action === 'load')   loadSpeaker(idx);
+      if (action === 'remove') removeSpeaker(idx);
+    });
+
+    document.getElementById('add-spk-btn').addEventListener('click', addSpeaker);
+    document.getElementById('spk-name-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addSpeaker();
+    });
+
+    function addSpeaker() {
+      const name = document.getElementById('spk-name-input').value.trim();
+      const mins = parseInt(document.getElementById('spk-min-input').value, 10) || 10;
+      if (!name) return;
+      const speakers = (session && [...(session.speakers || [])]) || [];
+      speakers.push({ name, duration: mins * 60 * 1000 });
+      updateSession(CODE, { speakers });
+      document.getElementById('spk-name-input').value = '';
+    }
+
+    function removeSpeaker(idx) {
+      const speakers = [...(session.speakers || [])];
+      speakers.splice(idx, 1);
+      const newIdx = Math.min(session.currentSpeakerIndex || 0, Math.max(0, speakers.length - 1));
+      updateSession(CODE, { speakers, currentSpeakerIndex: newIdx });
+    }
+
+    function loadSpeaker(idx) {
+      const speakers = session.speakers || [];
+      if (!speakers[idx]) return;
+      updateSession(CODE, {
+        currentSpeakerIndex:  idx,
+        duration:             speakers[idx].duration,
+        durationAdjustmentMs: 0,
+        startedAt:            0,
+        pausedAt:             0,
+        totalPausedMs:        0,
+        state:                'idle'
+      });
+    }
+
+    // ── Timer controls ────────────────────────────────────────
+    function getDurationMs() {
+      const m = Math.max(0, parseInt(setMin.value, 10) || 0);
+      const s = Math.max(0, Math.min(59, parseInt(setSec.value, 10) || 0));
+      return (m * 60 + s) * 1000;
+    }
+
+    document.getElementById('set-btn').addEventListener('click', () => {
+      const d = getDurationMs();
+      if (d <= 0) return;
+      if (session && session.state === 'running' && !confirm('Set a new time while the clock is running?')) return;
+      updateSession(CODE, {
+        duration:             d,
+        durationAdjustmentMs: 0,
+        startedAt:            0,
+        pausedAt:             0,
+        totalPausedMs:        0,
+        state:                'idle'
+      });
+    });
+
+    startBtn.addEventListener('click', () => {
+      if (!session) return;
+      // If idle with no startedAt, use current duration
+      updateSession(CODE, { state: 'running', startedAt: Date.now(), pausedAt: 0, totalPausedMs: 0 });
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      if (!session || session.state !== 'running') return;
+      updateSession(CODE, { state: 'paused', pausedAt: Date.now() });
+    });
+
+    resumeBtn.addEventListener('click', () => {
+      if (!session || session.state !== 'paused') return;
+      const extra = Date.now() - (session.pausedAt || Date.now());
+      updateSession(CODE, {
+        state:         'running',
+        pausedAt:      0,
+        totalPausedMs: (session.totalPausedMs || 0) + extra
+      });
+    });
+
+    resetBtn.addEventListener('click', () => {
+      if (!session) return;
+      if (session.state === 'running' && !confirm('Reset the clock while it\'s running?')) return;
+      updateSession(CODE, {
+        state:                'idle',
+        startedAt:            0,
+        pausedAt:             0,
+        totalPausedMs:        0,
+        durationAdjustmentMs: 0
+      });
+    });
+
+    // Adjust buttons
+    function adjustTime(deltaMs) {
+      if (!session) return;
+      updateSession(CODE, { durationAdjustmentMs: (session.durationAdjustmentMs || 0) + deltaMs });
+    }
+    document.getElementById('minus5').addEventListener('click',  () => adjustTime(-5 * 60000));
+    document.getElementById('minus1').addEventListener('click',  () => adjustTime(-60000));
+    document.getElementById('minus30').addEventListener('click', () => adjustTime(-30000));
+    document.getElementById('plus30').addEventListener('click',  () => adjustTime( 30000));
+    document.getElementById('plus1').addEventListener('click',   () => adjustTime( 60000));
+    document.getElementById('plus5').addEventListener('click',   () => adjustTime( 5 * 60000));
+
+    // Clamp seconds
+    setSec.addEventListener('change', () => {
+      const v = parseInt(setSec.value, 10);
+      if (isNaN(v) || v < 0) setSec.value = '00';
+      if (v > 59)             setSec.value = '59';
+      setSec.value = String(setSec.value).padStart(2, '0');
+    });
+
+    // ── Messaging ─────────────────────────────────────────────
+    document.getElementById('send-msg-btn').addEventListener('click', sendMessage);
+    msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+
+    function sendMessage() {
+      const text = msgInput.value.trim();
+      if (!text) return;
+      updateSession(CODE, { message: { text, sentAt: Date.now() } });
+      msgInput.value = '';
+      // Add to history
+      const el = document.createElement('div');
+      el.className = 'msg-sent';
+      el.textContent = `"${text}"`;
+      msgHistory.prepend(el);
+    }
+
+    document.getElementById('clear-msg-btn').addEventListener('click', () => {
+      updateSession(CODE, { message: { text: '', sentAt: 0 } });
+    });
+
+    // ── Copy link ─────────────────────────────────────────────
+    function getSpeakerUrl() {
+      const base = location.href.replace('moderator.html', 'speaker.html');
+      return `${base}?code=${CODE}`;
+    }
+
+    function copyToClipboard(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      });
+    }
+
+    document.getElementById('copy-code-btn').addEventListener('click', () =>
+      copyToClipboard(CODE, document.getElementById('copy-code-btn')));
+    document.getElementById('copy-link-btn').addEventListener('click', () =>
+      copyToClipboard(getSpeakerUrl(), document.getElementById('copy-link-btn')));
+
+    // ── Utils ─────────────────────────────────────────────────
+    function escHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>

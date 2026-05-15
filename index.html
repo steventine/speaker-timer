@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speaker Timer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="landing">
+    <h1>🕐 Speaker Timer</h1>
+    <p class="tagline">Real-time countdown for live events</p>
+
+    <div class="mode-grid">
+      <div class="mode-card" id="card-local">
+        <span class="icon">📱</span>
+        <h2>Local Timer</h2>
+        <p>Set a timer on this device. No internet required.</p>
+      </div>
+      <div class="mode-card" id="card-speaker">
+        <span class="icon">🎤</span>
+        <h2>Join as Speaker</h2>
+        <p>Enter a session code from the moderator.</p>
+      </div>
+      <div class="mode-card" id="card-mod">
+        <span class="icon">🎛️</span>
+        <h2>Moderator</h2>
+        <p>Control the clock and manage speakers.</p>
+      </div>
+    </div>
+
+    <div class="join-form" id="join-form">
+      <label style="color: var(--muted); font-size:14px; letter-spacing:0.05em;">Enter session code</label>
+      <input
+        class="code-input"
+        id="code-input"
+        type="text"
+        maxlength="4"
+        placeholder="AB3X"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+      >
+      <button class="btn btn-primary btn-lg" id="join-btn">Join →</button>
+      <button class="btn btn-ghost btn-sm" id="cancel-join">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('card-local').addEventListener('click', () => {
+      window.location.href = 'speaker.html?mode=local';
+    });
+
+    document.getElementById('card-mod').addEventListener('click', () => {
+      window.location.href = 'moderator.html';
+    });
+
+    const joinForm  = document.getElementById('join-form');
+    const codeInput = document.getElementById('code-input');
+    const modeGrid  = document.querySelector('.mode-grid');
+
+    document.getElementById('card-speaker').addEventListener('click', () => {
+      modeGrid.style.display = 'none';
+      joinForm.classList.add('visible');
+      codeInput.focus();
+    });
+
+    document.getElementById('cancel-join').addEventListener('click', () => {
+      joinForm.classList.remove('visible');
+      modeGrid.style.display = '';
+      codeInput.value = '';
+    });
+
+    codeInput.addEventListener('input', () => {
+      codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
+
+    function doJoin() {
+      const code = codeInput.value.trim();
+      if (code.length !== 4) { codeInput.focus(); return; }
+      window.location.href = `speaker.html?code=${code}`;
+    }
+
+    document.getElementById('join-btn').addEventListener('click', doJoin);
+    codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+  </script>
+</body>
+</html>

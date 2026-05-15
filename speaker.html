@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speaker Timer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="app.config.js"></script>
+  <script src="app.js"></script>
+
+  <div class="speaker-view" id="view">
+
+    <!-- Sound unlock prompt (top of screen, dismisses after unlock) -->
+    <div class="sound-prompt hidden" id="sound-prompt">🔇 Tap to enable sound alerts</div>
+
+    <!-- Speaker name (from queue, connected mode) -->
+    <div class="speaker-name-label" id="speaker-name"></div>
+
+    <!-- Main countdown / overtime display -->
+    <div class="timer-display" id="timer">--:--</div>
+
+    <!-- Status line: READY / PAUSED / OVERTIME etc -->
+    <div class="status-label" id="status-label"></div>
+
+  </div>
+
+  <!-- Message banner (connected mode) -->
+  <div class="message-banner hidden" id="message-banner"></div>
+
+  <!-- ── Controls overlay ── -->
+  <div class="controls-overlay hidden-overlay" id="controls-overlay">
+
+    <!-- Local idle: time setter + start -->
+    <div class="overlay-time-setter" id="overlay-time-setter">
+      <input class="overlay-time-part" id="local-min" type="number" min="0" max="99" value="20">
+      <span class="overlay-time-sep">:</span>
+      <input class="overlay-time-part" id="local-sec" type="number" min="0" max="59" value="00">
+    </div>
+
+    <button class="btn btn-success btn-lg"    id="btn-start"   style="display:none;">▶ Start</button>
+    <button class="btn btn-warning"           id="btn-pause"   style="display:none;">⏸ Pause</button>
+    <button class="btn btn-primary"           id="btn-resume"  style="display:none;">▶ Resume</button>
+    <button class="btn btn-secondary btn-sm"  id="btn-minus"   style="display:none;">−1 min</button>
+    <button class="btn btn-secondary btn-sm"  id="btn-plus"    style="display:none;">+1 min</button>
+    <button class="btn btn-ghost btn-sm"      id="btn-reset"   style="display:none;">↺ Reset</button>
+    <button class="btn btn-ghost btn-sm"      id="btn-fs">⛶ Fullscreen</button>
+
+  </div>
+
+  <script>
+    // ── URL params ────────────────────────────────────────────
+    const params  = new URLSearchParams(location.search);
+    const mode    = params.get('mode');
+    const code    = params.get('code');
+    const isLocal = mode === 'local' || !code;
+
+    // ── DOM refs ─────────────────────────────────────────────
+    const view          = document.getElementById('view');
+    const timerEl       = document.getElementById('timer');
+    const statusEl      = document.getElementById('status-label');
+    const nameEl        = document.getElementById('speaker-name');
+    const soundPrompt   = document.getElementById('sound-prompt');
+    const msgBanner     = document.getElementById('message-banner');
+    const overlay       = document.getElementById('controls-overlay');
+    const timeSetter    = document.getElementById('overlay-time-setter');
+    const localMinEl    = document.getElementById('local-min');
+    const localSecEl    = document.getElementById('local-sec');
+    const btnStart      = document.getElementById('btn-start');
+    const btnPause      = document.getElementById('btn-pause');
+    const btnResume     = document.getElementById('btn-resume');
+    const btnMinus      = document.getElementById('btn-minus');
+    const btnPlus       = document.getElementById('btn-plus');
+    const btnReset      = document.getElementById('btn-reset');
+    const btnFs         = document.getElementById('btn-fs');
+
+    // ── Sound ─────────────────────────────────────────────────
+    soundPrompt.addEventListener('click', () => {
+      unlockAudio();
+      soundPrompt.classList.add('hidden');
+    });
+
+    // ── Fullscreen ────────────────────────────────────────────
+    btnFs.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      btnFs.textContent = document.fullscreenElement ? '⊠ Exit Fullscreen' : '⛶ Fullscreen';
+    });
+
+    // ── Overlay show/hide ─────────────────────────────────────
+    let hideOverlayTimer = null;
+
+    function showOverlay(sticky) {
+      overlay.classList.remove('hidden-overlay');
+      clearTimeout(hideOverlayTimer);
+      if (!sticky) {
+        hideOverlayTimer = setTimeout(() => overlay.classList.add('hidden-overlay'), 3000);
+      }
+    }
+
+    function hideOverlay() {
+      overlay.classList.add('hidden-overlay');
+    }
+
+    document.addEventListener('mousemove',  () => showOverlay(false));
+    document.addEventListener('touchstart', () => showOverlay(false), { passive: true });
+
+    // keep overlay up when mouse is over it
+    overlay.addEventListener('mouseenter', () => {
+      clearTimeout(hideOverlayTimer);
+      overlay.classList.remove('hidden-overlay');
+    });
+    overlay.addEventListener('mouseleave', () => {
+      hideOverlayTimer = setTimeout(() => overlay.classList.add('hidden-overlay'), 2000);
+    });
+
+    // ── Shared timer state ────────────────────────────────────
+    let tickInterval   = null;
+    let lastColorClass = 'green';
+    let firedYellow    = false;
+    let firedRed       = false;
+    let inOvertime     = false;
+    let overtimeStartMs = 0;
+
+    // Message banner
+    let lastMsgSentAt    = 0;
+    let msgDismissTimer  = null;
+
+    function showMessage(text, sentAt) {
+      if (sentAt <= lastMsgSentAt || !text) return;
+      lastMsgSentAt = sentAt;
+      clearTimeout(msgDismissTimer);
+      msgBanner.textContent = text;
+      msgBanner.classList.remove('hidden');
+      msgDismissTimer = setTimeout(() => msgBanner.classList.add('hidden'), 10000);
+    }
+    msgBanner.addEventListener('click', () => {
+      msgBanner.classList.add('hidden');
+      clearTimeout(msgDismissTimer);
+    });
+
+    function setTimerColor(cc) {
+      if (cc === lastColorClass) return;
+      timerEl.classList.remove('green', 'yellow', 'red');
+      timerEl.classList.add(cc);
+      lastColorClass = cc;
+    }
+
+    function stopTick() {
+      if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+    }
+
+    // Core display update — handles normal countdown AND overtime
+    function applyDisplay(remainingMs, state) {
+      if (remainingMs > 0) {
+        // ── Normal countdown ──
+        inOvertime = false;
+        view.classList.remove('overtime');
+        timerEl.textContent = formatTime(remainingMs);
+        setTimerColor(colorClass(remainingMs));
+
+        if (remainingMs <= T_PULSE && state === 'running') {
+          timerEl.classList.add('pulsing');
+        } else {
+          timerEl.classList.remove('pulsing');
+        }
+
+        if (!firedYellow && remainingMs <= T_YELLOW) { firedYellow = true; alertYellow(); }
+        if (!firedRed    && remainingMs <= T_RED)    { firedRed    = true; alertRed(); }
+
+      } else if (state === 'running') {
+        // ── Overtime ──
+        if (!inOvertime) {
+          inOvertime      = true;
+          overtimeStartMs = Date.now();
+          view.classList.add('overtime');
+          setTimerColor('red');
+          timerEl.classList.add('pulsing');
+          statusEl.textContent = 'OVERTIME';
+        }
+        timerEl.textContent = formatOvertime(Date.now() - overtimeStartMs);
+      }
+    }
+
+    function resetDisplayState() {
+      inOvertime = false;
+      firedYellow = false;
+      firedRed = false;
+      view.classList.remove('overtime');
+      timerEl.classList.remove('pulsing');
+      setTimerColor('green');
+    }
+
+    // ════════════════════════════════════════════════════════
+    //  LOCAL MODE
+    // ════════════════════════════════════════════════════════
+    if (isLocal) {
+      soundPrompt.classList.remove('hidden');
+
+      // Show local controls in overlay
+      timeSetter.style.display = 'flex';
+      btnStart.style.display   = '';
+      btnReset.style.display   = '';
+
+      let endTime   = 0;
+      let remaining = 0;
+      let localState = 'idle'; // idle | running | paused
+
+      function getDuration() {
+        const m = Math.max(0, parseInt(localMinEl.value, 10) || 0);
+        const s = Math.max(0, Math.min(59, parseInt(localSecEl.value, 10) || 0));
+        return (m * 60 + s) * 1000;
+      }
+
+      function setLocalControls(state) {
+        localState = state;
+        timeSetter.style.display  = state === 'idle'    ? 'flex' : 'none';
+        btnStart.style.display    = state === 'idle'    ? ''     : 'none';
+        btnPause.style.display    = state === 'running' ? ''     : 'none';
+        btnResume.style.display   = state === 'paused'  ? ''     : 'none';
+        btnMinus.style.display    = state !== 'idle'    ? ''     : 'none';
+        btnPlus.style.display     = state !== 'idle'    ? ''     : 'none';
+        btnReset.style.display    = '';
+
+        localMinEl.disabled = state !== 'idle';
+        localSecEl.disabled = state !== 'idle';
+
+        // Sticky overlay when idle (controls need to be accessible for setup)
+        if (state === 'idle') showOverlay(true);
+      }
+
+      function localReset() {
+        stopTick();
+        resetDisplayState();
+        const d = getDuration();
+        timerEl.textContent  = formatTime(d);
+        statusEl.textContent = '';
+        setLocalControls('idle');
+      }
+
+      btnStart.addEventListener('click', () => {
+        unlockAudio();
+        soundPrompt.classList.add('hidden');
+        const d = getDuration();
+        if (d <= 0) return;
+        endTime   = Date.now() + d;
+        remaining = d;
+        resetDisplayState();
+        statusEl.textContent = '';
+        setLocalControls('running');
+        tickInterval = setInterval(localTick, 100);
+      });
+
+      btnPause.addEventListener('click', () => {
+        stopTick();
+        setLocalControls('paused');
+        statusEl.textContent = 'PAUSED';
+        timerEl.classList.remove('pulsing');
+      });
+
+      btnResume.addEventListener('click', () => {
+        if (inOvertime) {
+          // resume from overtime: just keep the overtime tick going
+          setLocalControls('running');
+          statusEl.textContent = 'OVERTIME';
+          tickInterval = setInterval(localTick, 100);
+          return;
+        }
+        endTime = Date.now() + remaining;
+        statusEl.textContent = '';
+        setLocalControls('running');
+        tickInterval = setInterval(localTick, 100);
+      });
+
+      btnReset.addEventListener('click', localReset);
+
+      btnMinus.addEventListener('click', () => {
+        endTime   -= 60000;
+        remaining  = Math.max(0, remaining - 60000);
+        if (localState === 'paused' && !inOvertime) timerEl.textContent = formatTime(remaining);
+      });
+
+      btnPlus.addEventListener('click', () => {
+        if (inOvertime) {
+          // adding time during overtime: convert back to running countdown
+          inOvertime = false;
+          view.classList.remove('overtime');
+          remaining  = 60000;
+          endTime    = Date.now() + 60000;
+          statusEl.textContent = '';
+          timerEl.classList.remove('pulsing');
+          setTimerColor('red');
+        } else {
+          endTime   += 60000;
+          remaining += 60000;
+        }
+        if (localState === 'paused') timerEl.textContent = formatTime(remaining);
+      });
+
+      function localTick() {
+        remaining = endTime - Date.now();
+        applyDisplay(remaining, 'running');
+      }
+
+      localSecEl.addEventListener('change', () => {
+        const v = parseInt(localSecEl.value, 10);
+        if (isNaN(v) || v < 0) localSecEl.value = '00';
+        if (v > 59)             localSecEl.value = '59';
+        localSecEl.value = String(localSecEl.value).padStart(2, '0');
+      });
+
+      localReset();
+
+    // ════════════════════════════════════════════════════════
+    //  CONNECTED MODE
+    // ════════════════════════════════════════════════════════
+    } else {
+      soundPrompt.classList.remove('hidden');
+      timeSetter.style.display = 'none'; // no time-setter inputs in connected mode
+
+      // Show timer control buttons (write to Firebase, same as moderator)
+      btnReset.style.display = '';
+
+      statusEl.textContent = 'CONNECTING…';
+
+      let session   = null;
+      let prevState = null;
+
+      function setConnectedControls(state) {
+        btnStart.style.display  = state === 'idle'    ? '' : 'none';
+        btnPause.style.display  = state === 'running' ? '' : 'none';
+        btnResume.style.display = state === 'paused'  ? '' : 'none';
+        btnMinus.style.display  = state !== 'idle'    ? '' : 'none';
+        btnPlus.style.display   = state !== 'idle'    ? '' : 'none';
+      }
+
+      watchSession(code, (data) => {
+        if (!data) {
+          statusEl.textContent = 'SESSION NOT FOUND';
+          timerEl.textContent  = '--:--';
+          return;
+        }
+
+        session = data;
+        setConnectedControls(data.state);
+
+        // Speaker name from queue
+        const speakers = data.speakers || [];
+        const idx      = data.currentSpeakerIndex || 0;
+        nameEl.textContent = speakers[idx] ? speakers[idx].name : '';
+
+        // Message
+        if (data.message && data.message.text && data.message.sentAt) {
+          showMessage(data.message.text, data.message.sentAt);
+        }
+
+        if (data.state === 'idle') {
+          stopTick();
+          resetDisplayState();
+          inOvertime = false;
+          timerEl.textContent  = formatTime((data.duration || 0) + (data.durationAdjustmentMs || 0));
+          statusEl.textContent = 'READY';
+
+        } else if (data.state === 'running') {
+          statusEl.textContent = '';
+          if (prevState !== 'running') {
+            stopTick();
+            if (prevState === 'idle') { firedYellow = false; firedRed = false; inOvertime = false; }
+            tickInterval = setInterval(connectedTick, 100);
+          }
+
+        } else if (data.state === 'paused') {
+          stopTick();
+          inOvertime = false;
+          view.classList.remove('overtime');
+          timerEl.classList.remove('pulsing');
+          statusEl.textContent = 'PAUSED';
+          const rem = calcRemaining(data);
+          timerEl.textContent = formatTime(rem);
+          setTimerColor(colorClass(rem));
+
+        } else if (data.state === 'finished') {
+          stopTick();
+          statusEl.textContent = 'FINISHED';
+        }
+
+        prevState = data.state;
+      });
+
+      function connectedTick() {
+        if (!session || session.state !== 'running') return;
+        const rem      = calcRemaining(session);
+        const overtime = calcOvertime(session);
+        if (overtime > 0) {
+          applyDisplay(0, 'running');
+          timerEl.textContent = formatOvertime(overtime);
+        } else {
+          applyDisplay(rem, 'running');
+        }
+      }
+
+      // Control buttons — write to Firebase (syncs with moderator)
+      btnStart.addEventListener('click', () => {
+        if (!session) return;
+        unlockAudio();
+        soundPrompt.classList.add('hidden');
+        updateSession(code, { state: 'running', startedAt: Date.now(), pausedAt: 0, totalPausedMs: 0 });
+      });
+
+      btnPause.addEventListener('click', () => {
+        if (!session || session.state !== 'running') return;
+        updateSession(code, { state: 'paused', pausedAt: Date.now() });
+      });
+
+      btnResume.addEventListener('click', () => {
+        if (!session || session.state !== 'paused') return;
+        const extra = Date.now() - (session.pausedAt || Date.now());
+        updateSession(code, { state: 'running', pausedAt: 0, totalPausedMs: (session.totalPausedMs || 0) + extra });
+      });
+
+      btnReset.addEventListener('click', () => {
+        if (!session) return;
+        updateSession(code, { state: 'idle', startedAt: 0, pausedAt: 0, totalPausedMs: 0, durationAdjustmentMs: 0 });
+      });
+
+      btnMinus.addEventListener('click', () => {
+        if (!session) return;
+        updateSession(code, { durationAdjustmentMs: (session.durationAdjustmentMs || 0) - 60000 });
+      });
+
+      btnPlus.addEventListener('click', () => {
+        if (!session) return;
+        updateSession(code, { durationAdjustmentMs: (session.durationAdjustmentMs || 0) + 60000 });
+      });
+    }
+  </script>
+</body>
+</html>
