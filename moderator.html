@@ -227,8 +227,18 @@
     }
 
     // ── Render ────────────────────────────────────────────────
+    const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
+
     function renderFromSession() {
       if (!session) return;
+
+      if (session.state === 'running') {
+        const elapsed = (Date.now() - session.startedAt) - (session.totalPausedMs || 0);
+        if (elapsed > STALE_THRESHOLD_MS) {
+          updateSession(CODE, { state: 'idle', startedAt: 0, pausedAt: 0, totalPausedMs: 0, durationAdjustmentMs: 0 });
+          return;
+        }
+      }
 
       const state  = session.state || 'idle';
       const rem    = calcRemaining(session);
