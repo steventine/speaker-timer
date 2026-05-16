@@ -118,6 +118,17 @@
   </div>
 
   <script>
+    // ── Wake lock ─────────────────────────────────────────────
+    let _wakeLock = null;
+    async function acquireWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try { _wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') acquireWakeLock();
+    });
+    acquireWakeLock();
+
     // ── State ─────────────────────────────────────────────────
     const STORAGE_KEY = 'speaker-clock-mod-code';
     let CODE     = localStorage.getItem(STORAGE_KEY) || generateCode();
@@ -211,6 +222,7 @@
                                state === 'finished'? 'var(--red)' : 'var(--muted)';
 
       // Preview
+      document.getElementById('preview-phone').classList.remove('overtime');
       previewTimer.textContent = formatTime(rem);
       const cc = colorClass(rem);
       previewTimer.className = `preview-timer ${cc}`;
@@ -253,10 +265,18 @@
 
     function tickPreview() {
       if (!session || session.state !== 'running') return;
-      const rem = calcRemaining(session);
-      previewTimer.textContent = formatTime(rem);
-      const cc = colorClass(rem);
-      previewTimer.className = `preview-timer ${cc}`;
+      const rem      = calcRemaining(session);
+      const overtime = calcOvertime(session);
+      const phone    = document.getElementById('preview-phone');
+      if (overtime > 0) {
+        phone.classList.add('overtime');
+        previewTimer.textContent = formatOvertime(overtime);
+        previewTimer.className   = 'preview-timer red';
+      } else {
+        phone.classList.remove('overtime');
+        previewTimer.textContent = formatTime(rem);
+        previewTimer.className   = `preview-timer ${colorClass(rem)}`;
+      }
     }
 
     // ── Speaker list ──────────────────────────────────────────

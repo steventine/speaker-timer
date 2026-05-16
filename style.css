@@ -589,6 +589,19 @@ body {
 .overlay-time-sep { font-size: 36px; font-weight: 900; color: rgba(255,255,255,0.4); line-height: 1; }
 
 /* Overtime state */
+.preview-phone.overtime {
+  background: var(--red) !important;
+  border-color: var(--red);
+  transition: background-color 0.5s ease;
+}
+.preview-phone.overtime .preview-timer {
+  color: #fff !important;
+}
+.preview-phone.overtime .preview-spk-name,
+.preview-phone.overtime .preview-status {
+  color: rgba(255,255,255,0.7) !important;
+}
+
 .speaker-view.overtime {
   background: var(--red) !important;
   transition: background-color 0.5s ease;

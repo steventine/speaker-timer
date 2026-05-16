@@ -53,6 +53,17 @@
   </div>
 
   <script>
+    // ── Wake lock ─────────────────────────────────────────────
+    let _wakeLock = null;
+    async function acquireWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try { _wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') acquireWakeLock();
+    });
+    acquireWakeLock();
+
     // ── URL params ────────────────────────────────────────────
     const params  = new URLSearchParams(location.search);
     const mode    = params.get('mode');

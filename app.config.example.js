@@ -7,3 +7,8 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "",
   appId:             ""
 };
+
+const DEPLOY_CONFIG = {
+  s3Bucket: "your-bucket-name",
+  s3Prefix: "speaker-timer"
+};
