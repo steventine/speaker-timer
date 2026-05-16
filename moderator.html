@@ -27,6 +27,7 @@
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="conn-dot" id="conn-dot"></div>
         <span class="conn-label" id="conn-label">Connecting…</span>
+        <button class="btn btn-ghost btn-sm" id="fullscreen-btn" title="Toggle fullscreen">⛶ Fullscreen</button>
         <a href="index.html" class="btn btn-ghost btn-sm">← Home</a>
       </div>
     </header>
@@ -439,6 +440,19 @@
       copyToClipboard(CODE, document.getElementById('copy-code-btn')));
     document.getElementById('copy-link-btn').addEventListener('click', () =>
       copyToClipboard(getSpeakerUrl(), document.getElementById('copy-link-btn')));
+
+    // ── Fullscreen ────────────────────────────────────────────
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen();
+      }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      fullscreenBtn.textContent = document.fullscreenElement ? '✕ Exit Fullscreen' : '⛶ Fullscreen';
+    });
 
     // ── Utils ─────────────────────────────────────────────────
     function escHtml(str) {
