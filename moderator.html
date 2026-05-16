@@ -206,6 +206,13 @@
     }
 
     function startWatching() {
+      getDb().ref('.info/connected').on('value', snap => {
+        const online = snap.val();
+        connDot.className     = `conn-dot ${online ? 'ok' : 'fail'}`;
+        connLabel.textContent = online ? 'Connected' : 'Disconnected';
+        connLabel.style.color = online ? 'var(--muted)' : 'var(--red)';
+      });
+
       unwatch = watchSession(CODE, (data) => {
         if (!data) return;
         session = data;
