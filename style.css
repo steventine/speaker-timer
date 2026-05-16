@@ -500,44 +500,23 @@ body {
   font-style: italic;
 }
 
-/* Speaker preview */
-.preview-phone {
-  background: var(--bg);
-  border: 2px solid var(--border);
-  border-radius: 20px;
-  aspect-ratio: 16/9;
-  max-height: none;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+/* Speaker preview iframe */
+.preview-iframe-wrap {
   position: relative;
-  margin: 0 auto;
+  width: 100%;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 2px solid var(--border);
 }
-.preview-spk-name { font-size: 11px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
-.preview-timer {
-  font-family: 'Courier New', monospace;
-  font-size: 44px;
-  font-weight: 900;
-  color: var(--green);
-  transition: color 0.8s ease;
-  line-height: 1;
-}
-.preview-timer.yellow { color: var(--yellow); }
-.preview-timer.red    { color: var(--red); }
-.preview-status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 6px; }
-.preview-msg {
-  font-size: 11px;
-  color: var(--text);
-  background: rgba(255,255,255,0.08);
-  border-radius: 8px;
-  padding: 6px 10px;
-  margin-top: 12px;
-  max-width: 85%;
-  text-align: center;
-  display: none;
+.preview-iframe-wrap iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: none;
+  pointer-events: none;
+  display: block;
+  transform-origin: top left;
 }
 
 /* ── Controls overlay (hover / tap to reveal) ────────────── */
@@ -589,19 +568,6 @@ body {
 .overlay-time-sep { font-size: 36px; font-weight: 900; color: rgba(255,255,255,0.4); line-height: 1; }
 
 /* Overtime state */
-.preview-phone.overtime {
-  background: var(--red) !important;
-  border-color: var(--red);
-  transition: background-color 0.5s ease;
-}
-.preview-phone.overtime .preview-timer {
-  color: #fff !important;
-}
-.preview-phone.overtime .preview-spk-name,
-.preview-phone.overtime .preview-status {
-  color: rgba(255,255,255,0.7) !important;
-}
-
 .speaker-view.overtime {
   background: var(--red) !important;
   transition: background-color 0.5s ease;

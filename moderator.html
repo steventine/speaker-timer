@@ -93,11 +93,8 @@
     <!-- ── Sidebar: speaker preview ── -->
     <aside class="mod-sidebar">
       <div class="panel-label">Speaker View Preview</div>
-      <div class="preview-phone" id="preview-phone">
-        <div class="preview-spk-name" id="preview-name"></div>
-        <div class="preview-timer green" id="preview-timer">--:--</div>
-        <div class="preview-status" id="preview-status">IDLE</div>
-        <div class="preview-msg" id="preview-msg"></div>
+      <div class="preview-iframe-wrap" id="preview-iframe-wrap">
+        <iframe id="preview-iframe" scrolling="no" title="Speaker view preview"></iframe>
       </div>
 
       <div style="margin-top:12px;">
@@ -133,7 +130,6 @@
     const STORAGE_KEY = 'speaker-clock-mod-code';
     let CODE     = localStorage.getItem(STORAGE_KEY) || generateCode();
     let session  = null;
-    let tickInt  = null;
     let unwatch  = null;
 
     // ── DOM ───────────────────────────────────────────────────
@@ -150,15 +146,24 @@
     const speakerList    = document.getElementById('speaker-list');
     const msgInput       = document.getElementById('msg-input');
     const msgHistory     = document.getElementById('msg-history');
-    const previewTimer   = document.getElementById('preview-timer');
-    const previewName    = document.getElementById('preview-name');
-    const previewStatus  = document.getElementById('preview-status');
-    const previewMsg     = document.getElementById('preview-msg');
     const stateBadge     = document.getElementById('state-badge');
 
     // ── Init ──────────────────────────────────────────────────
     sessionCodeEl.textContent = CODE;
     shareCodeEl.textContent   = CODE;
+
+    // Scale the preview iframe to fill its container at a 900px design width
+    const previewIframe = document.getElementById('preview-iframe');
+    const previewWrap   = document.getElementById('preview-iframe-wrap');
+    previewIframe.src   = `speaker.html?code=${CODE}&preview=1`;
+    function scalePreview() {
+      const scale = previewWrap.clientWidth / 900;
+      previewIframe.style.width     = '900px';
+      previewIframe.style.height    = '506px';
+      previewIframe.style.transform = `scale(${scale})`;
+    }
+    new ResizeObserver(scalePreview).observe(previewWrap);
+    scalePreview();
 
     if (!FIREBASE_READY) {
       connDot.classList.add('fail');
@@ -221,29 +226,6 @@
                                state === 'paused'  ? 'var(--yellow)' :
                                state === 'finished'? 'var(--red)' : 'var(--muted)';
 
-      // Preview
-      document.getElementById('preview-phone').classList.remove('overtime');
-      previewTimer.textContent = formatTime(rem);
-      const cc = colorClass(rem);
-      previewTimer.className = `preview-timer ${cc}`;
-
-      const speakers = session.speakers || [];
-      const idx      = session.currentSpeakerIndex || 0;
-      const spkName  = speakers[idx] ? speakers[idx].name : '';
-      previewName.textContent = spkName;
-
-      previewStatus.textContent = state === 'idle'     ? 'READY' :
-                                  state === 'paused'   ? 'PAUSED' :
-                                  state === 'finished' ? "TIME'S UP" : '';
-
-      // Show message in preview
-      if (session.message && session.message.text) {
-        previewMsg.textContent = '💬 ' + session.message.text;
-        previewMsg.style.display = 'block';
-      } else {
-        previewMsg.style.display = 'none';
-      }
-
       // Button states
       startBtn.disabled  = state === 'running' || state === 'paused' || state === 'finished';
       resumeBtn.className = `btn btn-lg ${state === 'paused' ? 'btn-success' : 'btn-secondary'}`;
@@ -252,31 +234,7 @@
       setMin.disabled    = state === 'running';
       setSec.disabled    = state === 'running';
 
-      // Tick for running state
-      if (state === 'running' && !tickInt) {
-        tickInt = setInterval(tickPreview, 250);
-      } else if (state !== 'running' && tickInt) {
-        clearInterval(tickInt);
-        tickInt = null;
-      }
-
       renderSpeakerList();
-    }
-
-    function tickPreview() {
-      if (!session || session.state !== 'running') return;
-      const rem      = calcRemaining(session);
-      const overtime = calcOvertime(session);
-      const phone    = document.getElementById('preview-phone');
-      if (overtime > 0) {
-        phone.classList.add('overtime');
-        previewTimer.textContent = formatOvertime(overtime);
-        previewTimer.className   = 'preview-timer red';
-      } else {
-        phone.classList.remove('overtime');
-        previewTimer.textContent = formatTime(rem);
-        previewTimer.className   = `preview-timer ${colorClass(rem)}`;
-      }
     }
 
     // ── Speaker list ──────────────────────────────────────────

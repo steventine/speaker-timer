@@ -53,22 +53,25 @@
   </div>
 
   <script>
+    // ── URL params ────────────────────────────────────────────
+    const params     = new URLSearchParams(location.search);
+    const mode       = params.get('mode');
+    const code       = params.get('code');
+    const isLocal    = mode === 'local' || !code;
+    const isPreview  = params.get('preview') === '1';
+
     // ── Wake lock ─────────────────────────────────────────────
     let _wakeLock = null;
     async function acquireWakeLock() {
       if (!('wakeLock' in navigator)) return;
       try { _wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
     }
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') acquireWakeLock();
-    });
-    acquireWakeLock();
-
-    // ── URL params ────────────────────────────────────────────
-    const params  = new URLSearchParams(location.search);
-    const mode    = params.get('mode');
-    const code    = params.get('code');
-    const isLocal = mode === 'local' || !code;
+    if (!isPreview) {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') acquireWakeLock();
+      });
+      acquireWakeLock();
+    }
 
     // ── DOM refs ─────────────────────────────────────────────
     const view          = document.getElementById('view');
@@ -122,17 +125,18 @@
       overlay.classList.add('hidden-overlay');
     }
 
-    document.addEventListener('mousemove',  () => showOverlay(false));
-    document.addEventListener('touchstart', () => showOverlay(false), { passive: true });
+    if (!isPreview) {
+      document.addEventListener('mousemove',  () => showOverlay(false));
+      document.addEventListener('touchstart', () => showOverlay(false), { passive: true });
 
-    // keep overlay up when mouse is over it
-    overlay.addEventListener('mouseenter', () => {
-      clearTimeout(hideOverlayTimer);
-      overlay.classList.remove('hidden-overlay');
-    });
-    overlay.addEventListener('mouseleave', () => {
-      hideOverlayTimer = setTimeout(() => overlay.classList.add('hidden-overlay'), 2000);
-    });
+      overlay.addEventListener('mouseenter', () => {
+        clearTimeout(hideOverlayTimer);
+        overlay.classList.remove('hidden-overlay');
+      });
+      overlay.addEventListener('mouseleave', () => {
+        hideOverlayTimer = setTimeout(() => overlay.classList.add('hidden-overlay'), 2000);
+      });
+    }
 
     // ── Shared timer state ────────────────────────────────────
     let tickInterval   = null;
@@ -335,7 +339,7 @@
     //  CONNECTED MODE
     // ════════════════════════════════════════════════════════
     } else {
-      soundPrompt.classList.remove('hidden');
+      if (!isPreview) soundPrompt.classList.remove('hidden');
       timeSetter.style.display = 'none'; // no time-setter inputs in connected mode
 
       // Show timer control buttons (write to Firebase, same as moderator)
