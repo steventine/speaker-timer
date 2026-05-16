@@ -183,6 +183,11 @@ body {
 }
 .timer-display.pulsing { animation: pulse 0.75s ease-in-out infinite; }
 
+@media (orientation: landscape) and (max-height: 520px) {
+  .speaker-name-label { display: none; }
+  .message-banner { bottom: auto !important; top: 16px; }
+}
+
 .status-label {
   font-size: clamp(14px, 3vw, 22px);
   color: var(--muted);
@@ -260,8 +265,9 @@ body {
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255,255,255,0.2);
   border-radius: 18px;
-  padding: 22px 40px;
-  font-size: clamp(18px, 4vw, 30px);
+  padding: 12px 28px;
+  font-size: clamp(16px, 3.5vw, 26px);
+  line-height: 1.2;
   font-weight: 500;
   text-align: center;
   max-width: 88vw;
