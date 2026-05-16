@@ -205,6 +205,12 @@
       location.reload();
     }
 
+    function confirmIfRunning(msg) {
+      if (!session || session.state !== 'running') return true;
+      if (calcOvertime(session) > 0) return true;
+      return confirm(msg);
+    }
+
     function startWatching() {
       getDb().ref('.info/connected').on('value', snap => {
         const online = snap.val();
@@ -299,9 +305,7 @@
     function loadSpeaker(idx) {
       const speakers = session.speakers || [];
       if (!speakers[idx]) return;
-      const isRunning  = session.state === 'running';
-      const isOvertime = isRunning && calcOvertime(session) > 0;
-      if (isRunning && !isOvertime && !confirm('Load a new speaker while the timer is running?')) return;
+      if (!confirmIfRunning('Load a new speaker while the timer is running?')) return;
       updateSession(CODE, {
         currentSpeakerIndex:  idx,
         duration:             speakers[idx].duration,
@@ -323,7 +327,7 @@
     document.getElementById('set-btn').addEventListener('click', () => {
       const d = getDurationMs();
       if (d <= 0) return;
-      if (session && session.state === 'running' && !confirm('Set a new time while the clock is running?')) return;
+      if (!confirmIfRunning('Set a new time while the clock is running?')) return;
       updateSession(CODE, {
         duration:             d,
         durationAdjustmentMs: 0,
@@ -357,7 +361,7 @@
 
     resetBtn.addEventListener('click', () => {
       if (!session) return;
-      if (session.state === 'running' && !confirm('Reset the clock while it\'s running?')) return;
+      if (!confirmIfRunning('Reset the clock while it\'s running?')) return;
       updateSession(CODE, {
         state:                'idle',
         startedAt:            0,
