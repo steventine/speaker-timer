@@ -147,11 +147,12 @@
     let overtimeStartMs = 0;
 
     // Message banner
+    const pageLoadTime   = Date.now();
     let lastMsgSentAt    = 0;
     let msgDismissTimer  = null;
 
     function showMessage(text, sentAt) {
-      if (sentAt <= lastMsgSentAt || !text) return;
+      if (sentAt <= lastMsgSentAt || !text || sentAt < pageLoadTime) return;
       lastMsgSentAt = sentAt;
       clearTimeout(msgDismissTimer);
       msgBanner.textContent = text;
@@ -376,6 +377,9 @@
         // Message
         if (data.message && data.message.text && data.message.sentAt) {
           showMessage(data.message.text, data.message.sentAt);
+        } else {
+          clearTimeout(msgDismissTimer);
+          msgBanner.classList.add('hidden');
         }
 
         if (data.state === 'idle') {
