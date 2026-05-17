@@ -20,9 +20,17 @@
       <h1>🎛️ Speaker Timer</h1>
       <div class="session-pill">
         <span style="font-size:12px;color:var(--muted);">SESSION</span>
-        <span class="session-code-text" id="session-code">----</span>
-        <button class="btn btn-ghost btn-sm" id="copy-code-btn" title="Copy speaker link">📋</button>
-        <button class="btn btn-ghost btn-sm" onclick="newSession()" title="Start a new session with a fresh code">+ New Session</button>
+        <div id="session-display" style="display:flex;align-items:center;gap:8px;">
+          <span class="session-code-text" id="session-code">----</span>
+          <button class="btn btn-ghost btn-sm" id="copy-code-btn" title="Copy code">📋</button>
+          <button class="btn btn-ghost btn-sm" id="change-session-btn" title="Switch to a different session">✏️ Change</button>
+          <button class="btn btn-ghost btn-sm" id="new-session-btn" title="Start a new session with a fresh code">+ New</button>
+        </div>
+        <div id="session-edit" style="display:none;align-items:center;gap:4px;">
+          <input id="session-switch-input" class="text-input" style="width:90px;padding:4px 8px;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;" maxlength="8" placeholder="Code">
+          <button class="btn btn-primary btn-sm" id="session-switch-go">Go</button>
+          <button class="btn btn-ghost btn-sm" id="session-switch-cancel">✕</button>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="conn-dot" id="conn-dot"></div>
@@ -105,6 +113,7 @@
           <span style="font-family:'Courier New';font-size:22px;color:var(--accent);letter-spacing:0.2em;" id="share-code">----</span>
         </p>
         <button class="btn btn-secondary btn-sm" id="copy-link-btn" style="margin-top:8px;">Copy speaker link</button>
+        <button class="btn btn-secondary btn-sm" id="copy-mod-link-btn" style="margin-top:4px;">Copy moderator link</button>
       </div>
 
       <div style="margin-top:4px;">
@@ -129,7 +138,13 @@
 
     // ── State ─────────────────────────────────────────────────
     const STORAGE_KEY = 'speaker-clock-mod-code';
-    let CODE     = localStorage.getItem(STORAGE_KEY) || generateCode();
+    const _urlParams = new URLSearchParams(location.search);
+    let CODE = _urlParams.get('code') || localStorage.getItem(STORAGE_KEY) || generateCode();
+    if (!_urlParams.get('code')) {
+      const _u = new URL(location.href);
+      _u.searchParams.set('code', CODE);
+      history.replaceState(null, '', _u.toString());
+    }
     let session  = null;
     let unwatch  = null;
 
@@ -202,8 +217,9 @@
 
     function newSession() {
       if (!confirm('Start a new session? The current session code will stop working for any connected speakers.')) return;
-      localStorage.removeItem(STORAGE_KEY);
-      location.reload();
+      const u = new URL(location.href);
+      u.searchParams.set('code', generateCode());
+      location.assign(u.toString());
     }
 
     function confirmIfRunning(msg) {
@@ -424,8 +440,14 @@
 
     // ── Copy link ─────────────────────────────────────────────
     function getSpeakerUrl() {
-      const base = location.href.replace('moderator.html', 'speaker.html');
-      return `${base}?code=${CODE}`;
+      const u = new URL(location.href);
+      u.pathname = u.pathname.replace('moderator.html', 'speaker.html');
+      u.search = `?code=${CODE}`;
+      return u.toString();
+    }
+
+    function getModeratorUrl() {
+      return location.href;
     }
 
     function copyToClipboard(text, btn) {
@@ -440,6 +462,42 @@
       copyToClipboard(CODE, document.getElementById('copy-code-btn')));
     document.getElementById('copy-link-btn').addEventListener('click', () =>
       copyToClipboard(getSpeakerUrl(), document.getElementById('copy-link-btn')));
+    document.getElementById('copy-mod-link-btn').addEventListener('click', () =>
+      copyToClipboard(getModeratorUrl(), document.getElementById('copy-mod-link-btn')));
+
+    // ── Change session ────────────────────────────────────────
+    const sessionDisplay     = document.getElementById('session-display');
+    const sessionEdit        = document.getElementById('session-edit');
+    const sessionSwitchInput = document.getElementById('session-switch-input');
+
+    document.getElementById('new-session-btn').addEventListener('click', newSession);
+    document.getElementById('change-session-btn').addEventListener('click', () => {
+      sessionDisplay.style.display = 'none';
+      sessionEdit.style.display    = 'flex';
+      sessionSwitchInput.value     = CODE;
+      sessionSwitchInput.focus();
+      sessionSwitchInput.select();
+    });
+
+    function commitSessionSwitch() {
+      const code = sessionSwitchInput.value.trim().toUpperCase();
+      if (!code) return;
+      const u = new URL(location.href);
+      u.searchParams.set('code', code);
+      location.assign(u.toString());
+    }
+
+    function cancelSessionSwitch() {
+      sessionEdit.style.display    = 'none';
+      sessionDisplay.style.display = 'flex';
+    }
+
+    document.getElementById('session-switch-go').addEventListener('click', commitSessionSwitch);
+    document.getElementById('session-switch-cancel').addEventListener('click', cancelSessionSwitch);
+    sessionSwitchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  commitSessionSwitch();
+      if (e.key === 'Escape') cancelSessionSwitch();
+    });
 
     // ── Fullscreen ────────────────────────────────────────────
     const fullscreenBtn = document.getElementById('fullscreen-btn');
