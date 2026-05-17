@@ -332,15 +332,16 @@
     function loadSpeaker(idx) {
       const speakers = session.speakers || [];
       if (!speakers[idx]) return;
-      if (!confirmIfRunning('Load a new speaker while the timer is running?')) return;
+      if (!confirmIfRunning(`Stop the current timer and start ${speakers[idx].name}?`)) return;
       updateSession(CODE, {
         currentSpeakerIndex:  idx,
+        speakerActive:        true,
         duration:             speakers[idx].duration,
         durationAdjustmentMs: 0,
-        startedAt:            0,
+        startedAt:            Date.now(),
         pausedAt:             0,
         totalPausedMs:        0,
-        state:                'idle'
+        state:                'running'
       });
     }
 
@@ -356,6 +357,7 @@
       if (d <= 0) return;
       if (!confirmIfRunning('Set a new time while the clock is running?')) return;
       updateSession(CODE, {
+        speakerActive:        false,
         duration:             d,
         durationAdjustmentMs: 0,
         startedAt:            0,

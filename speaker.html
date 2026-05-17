@@ -369,10 +369,10 @@
         session = data;
         setConnectedControls(data.state);
 
-        // Speaker name from queue
+        // Speaker name — only when timer was explicitly loaded from queue
         const speakers = data.speakers || [];
         const idx      = data.currentSpeakerIndex || 0;
-        nameEl.textContent = speakers[idx] ? speakers[idx].name : '';
+        nameEl.textContent = (data.speakerActive && speakers[idx]) ? speakers[idx].name : '';
 
         // Message
         if (data.message && data.message.text && data.message.sentAt) {

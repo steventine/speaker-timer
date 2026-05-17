@@ -70,6 +70,7 @@ function createSession(code, durationMs, speakers = []) {
     totalPausedMs:        0,
     state:                "idle",
     currentSpeakerIndex:  0,
+    speakerActive:        false,
     speakers,
     message: { text: "", sentAt: 0 }
   });
