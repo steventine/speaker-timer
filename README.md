@@ -8,11 +8,13 @@ A real-time countdown clock for live events. The moderator controls the timer fr
 - **Connected mode** — moderator and speaker sync in real time via Firebase
 - **Overtime counter** — when time runs out, switches to a `+MM:SS` overtime display
 - **Moderator messages** — send short cues to the speaker's screen (e.g. "wrap up now")
-- **Speaker queue** — pre-load multiple speakers with individual time allocations
+- **Speaker queue** — pre-load multiple speakers with individual time allocations; click ▶ to load a speaker and start their countdown immediately
+- **Speaker name display** — the speaker's name appears on their screen when started from the queue
 - **Live adjustments** — add or subtract 30 sec, 1 min, or 5 min on the fly
 - **Color transitions** — green → yellow (5 min) → red (1 min) → pulsing (30 sec)
 - **Audio alerts** — beeps at the 5-minute and 1-minute warnings
-- **Fullscreen** — one tap from the hover controls on the speaker view
+- **Fullscreen** — available on both the speaker and moderator views
+- **Shareable session links** — the moderator URL contains the session code; bookmark it or open it on another device to resume the same session
 
 ## Getting Started
 
@@ -55,9 +57,10 @@ const FIREBASE_CONFIG = {
 
 #### 3. Run the event
 
-1. Open `moderator.html` — a session code is generated automatically and saved across refreshes
-2. On the speaker's device, open `index.html` → **Join as Speaker** → enter the code
-3. Set the duration, add speakers to the queue if needed, and hit **Start** when they begin talking
+1. Open `moderator.html` — a session code is generated and embedded in the URL automatically. Bookmark the URL or use **Copy moderator link** to resume the session from any device. Use **✏️ Change** in the header to switch to a custom or existing session code.
+2. Share the session code with speakers via **Copy speaker link**, or have them open `index.html` → **Join as Speaker** → enter the code manually.
+3. **Using the speaker queue:** add speakers with their allotted times, then click ▶ next to a speaker to load their name and time and start the countdown immediately.
+4. **Manual timer:** set the duration in the Timer panel and hit **Start**. The speaker name will not be shown on the speaker view in this mode.
 
 ## Files
 
@@ -76,4 +79,5 @@ const FIREBASE_CONFIG = {
 - Firebase Realtime Database in **test mode** expires its open rules after 30 days. Update the rules in the Firebase console before they expire.
 - Old sessions accumulate in the database harmlessly. Clear them anytime under **Realtime Database → Data**.
 - The app works by opening the HTML files directly in a browser (`file://`) — no web server required.
-- iOS Safari does not support the Fullscreen API. Use **Add to Home Screen** for a fullscreen experience on iPhone/iPad.
+- **iOS Low Power Mode** disables the screen wake lock, so the screen may still dim and lock during a session. Disable Low Power Mode on any iOS device used for presenting or moderating.
+- The Fullscreen API is not supported on older versions of iOS Safari. Use **Add to Home Screen** for a fullscreen-like experience on older iPhone/iPad devices.
